@@ -1,0 +1,155 @@
+---
+title: "Titanic"
+author: "Omar Rehan"
+output: html_document
+---
+
+## *Introduction*
+
+Welcome to my first EDA. It's basically a ripoff of my study circle leader's EDA but I'm kind of forced into this, so just bear with me.
+
+There are a couple of libraries that we're gonna need to include before starting our thing.
+
+```{r, eval = FALSE}
+library(rpart)
+library(dplyr)
+library(ggplot2)
+library(data.table)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+library(caret)
+```
+
+
+Next, we load the `train.csv` & `test.csv` files to get to work.
+
+```{r}
+Train <- read.csv(file = "train.csv", stringsAsFactors = FALSE, header = TRUE)
+Test <- read.csv(file = "test.csv", stringsAsFactors = FALSE, header = TRUE)
+```
+
+
+Now let's have a general look at the datasets and check them out.
+
+
+```{r}
+summary(Train)
+```
+
+
+```{r}
+summary(Test)
+```
+
+
+Okay, the next step is to merge these two datasets. In order to do so there is an issue we must address. The number of columns in the two datasets are different and that needs to be changed.
+
+```{r}
+ncol(Test)
+ncol(Train)
+```
+
+
+So what we're going to do is we'll add a new column called "Survived" to the "Test" dataset and fill it with (NA)s.
+
+```{r}
+Test$Survived <- NA
+```
+
+We'll also add a column indicating which dataset the element is from so we can split the two datasets again later.
+
+```{r}
+Train$IsTest <- FALSE
+Test$IsTest <- TRUE
+```
+
+
+Now enough with the child's play, let's merge'em!
+
+```{r}
+BothDatasets <- rbind(Train, Test)
+```
+
+
+Let's have a look, shall we?
+
+```{r}
+str(BothDatasets)
+```
+
+
+It's time to clean up our data! We need to change all the (NA)s in the dataset to values we can deal with. Let's see which columns we need to modify.
+
+```{r, echo = FALSE}
+summary(BothDatasets)
+```
+
+Okay, so the "Age" & "Fare" columns are the ones we need to work on.
+We'll use a common trick to get a not so accurate solution. We'll just replace it with the median of the known ages and fares of the rest of the elements.
+
+```{r}
+age.med <- median(BothDatasets$Age, na.rm = TRUE)
+fare.med <- median(BothDatasets$Fare, na.rm = TRUE)
+BothDatasets[is.na(BothDatasets$Age), "Age"] <- age.med
+BothDatasets[is.na(BothDatasets$Fare), "Age"] <- fare.med
+```
+
+
+I realize that the "Survived" column has (NA)s but that's because that's the goal of this EDA, silly. To predict their values.
+Let's have a look at our squeaky clean dataset. ain't it pretty?
+
+```{r}
+summary(BothDatasets)
+```
+
+One of the reasons we use R in data science is its categorical casting. Instead of dealing with every element alone, it starts giving each existing value an order or rank relative to the other existing values in the list. So let's try doing this with the "Sex" and "Embarked" columns and see how our dataset will change.
+
+```{r, }
+BothDatasets$Sex <- as.factor(BothDatasets$Sex)
+BothDatasets$Embarked <- as.factor(BothDatasets$Embarked)
+str(BothDatasets)
+```
+
+Looking at the "Embarked" column we see that an empty string is one of the existing values. Let's check the frequency of the other values in the dataset.
+
+```{r}
+nrow(BothDatasets[BothDatasets$Embarked == 'S',])
+nrow(BothDatasets[BothDatasets$Embarked == 'Q',])
+nrow(BothDatasets[BothDatasets$Embarked == 'C',])
+```
+
+Since 'S' blows the other two out of the water we'll just substitute the empty strings with 'S' and look at the dataset again.
+
+```{r}
+BothDatasets[BothDatasets$Embarked == '', "Embarked"] <- 'S'
+BothDatasets$Embarked <- droplevels(BothDatasets$Embarked)
+str(BothDatasets)
+```
+
+
+All better. Now is the time to split the "BothDatasets" back to "Train" and "Test"
+
+```{r}
+Train <- BothDatasets[BothDatasets$IsTest == FALSE,]
+Test <- BothDatasets[BothDatasets$IsTest == TRUE,]
+```
+
+
+Now that the "Train" dataset is alone again we'll cast the "Survived" column and the (NA)s of the "Test" dataset won't bother us.
+
+
+```{r}
+Train$Survived <- as.factor(Train$Survived)
+```
+
+
+
+We'll just do a basic prediction based on Gender. 
+
+```{r}
+summary(Train$Sex)
+prop.table(table(Train$Sex, Train$Survived), 1)
+```
+
+Turns out being a female can save your life!
