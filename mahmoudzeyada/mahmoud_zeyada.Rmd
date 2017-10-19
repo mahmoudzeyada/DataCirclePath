@@ -1,0 +1,171 @@
+---
+title: "Trying to solve Titanic problem"
+author: "Mahmoud Zeyada"
+output: html_document
+---
+#$CONTENTS$
+
+1.introduction.
+
+*1.1 what is the problem.
+
+*1.2 how to sove it.
+
+2.Trying to solve.
+
+#$libraryes$
+```{r,message=FALSE,warning=FALSE}
+library(rpart)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+
+```
+
+
+
+
+
+
+#$Introduction$
+
+##what is the problem
+
+i will talk about the way i was thinking about this prop , so i tried to descripe what the problem is and what is the inbut and the output ,so i .figured out that it is already gives me the in inbut and the output,so i skipped that step xd.
+
+we can also see the content of the table and the variables here!!!
+
+Variable Name | Description
+--------------|-------------
+Survived      | Survived (1) or died (0)
+Pclass        | Passenger's class
+Name          | Passenger's name
+Sex           | Passenger's sex
+Age           | Passenger's age
+SibSp         | Number of siblings/spouses aboard
+Parch         | Number of parents/children aboard
+Ticket        | Ticket number
+Fare          | Fare
+Cabin         | Cabin
+Embarked      | Port of embarkation
+IsTrain       | Define The Train DS
+-----------------------------------
+
+## how to solve it
+
+we are here in that prob we need to .predicit the survived ones from titanic .disatster depending on the data which is given as trating dataset.
+
+
+
+#$tring to solve$
+
+## steps
+
+1-we will upload data to r studio. there is two data sets the first one is a trian data the second one is a test data set which we will run our .predicitions on it. 
+```{r}
+train <- read.csv("train.csv")
+test <- read.csv("test.csv")
+summary(train)
+
+```
+ so the first thing came on my mind that who is more than other men or womenan d who survived men or women , so i will make a ratio between men and women to know.
+ 
+```{r}
+summary(train$Sex)
+prop.table(table(train$Sex,train$Survived),1)
+
+
+```
+2-when we see the Age row we see that there is na values so we will first cleaning the the whole table from NAs values to make good predictiones
+```{r,echo=FALSE}
+summary(train$Age) #AGE col
+summary(train$Embarked) #embarked col
+```
+3- so lets start with embarked col we see that there are 2 entries which is null so we can assume that it s cuz it is the greater one
+```{r}
+test$Survived<- NA
+combine <- rbind(train,test)
+combine$Embarked[combine$Embarked==" "] <- 'S'
+combine$Embarked <- factor(combine$Embarked)
+```
+we here first combine the two data set in one table which is combine but it must the number of row in thetable test equal to the table train so we make a col called survived .filled with NAs and combine them .
+
+4- before we clean the NAs in age col ,we can do some thing else and return again .
+in the name col we see the nobels and name we can .catgorize that so lets make a col the nobels.
+```{r}
+combine$Name<-as.character(combine$Name)
+combine$Title <- sapply(combine$Name, FUN=function(x) {strsplit(x, split='[,.]')[[1]][2]})
+combine$Title <- sub(' ', '', combine$Title)
+table(combine$Title)
+```
+
+
+
+there are a few very rare titles in here that won’t give our model much to work with, so let’s combine a few of the most unusual ones. We’ll begin with the French. Mademoiselle and Madame are pretty similar , so let’s combine them into a single category:
+```{r}
+combine$Title[combine$Title %in% c('Mme', 'Mlle')] <- 'Mlle'
+combine$Title[combine$Title %in% c('Capt', 'Don', 'Major', 'Sir')] <- 'Sir'
+combine$Title[combine$Title %in% c('Dona', 'Lady', 'the Countess', 'Jonkheer')] <- 'Lady'
+combine$Title <- factor(combine$Title)
+```
+5- we can assume that abi families has a big issues with the life boats so we can make some col which is expressing the family size so 
+```{r}
+ combine$FamilySize <- combine$SibSp + combine$Parch + 1 # it add all member of the familly with the existence of the passenger
+combine$Surname <- sapply(combine$Name, FUN=function(x) {strsplit(x, split='[,.]')[[1]][1]}) # we Determine the surname to combine with family size to avoid similarity between bassengers in surname and familysize so we combine them together
+combine$FamilyID <- paste(as.character(combine$FamilySize), combine$Surname, sep="") #we combine them together
+
+```
+but it is so many passenger who is travel alone so we can solne that
+```{r}
+combine$FamilyID[combine$FamilySize <= 2] <- 'Small'
+famIDs <- data.frame(table(combine$FamilyID))#to see the freq of each family
+
+```
+there is another isuue that there was families have 1 freq and we can solve that by let them small too
+```{r}
+famIDs <- famIDs[famIDs$Freq <= 2,] #overwrite the table to show smaller families 
+combine$FamilyID[combine$FamilyID %in% famIDs$Var1] <- 'Small'
+ combine$FamilyID <- factor(combine$FamilyID)
+
+```
+so here is a summary of the familyid col
+```{r,echo=FALSE}
+summary(combine$FamilyID)
+
+```
+back to the point 4 age col we can know predidct NAs in age by the magical rpart package
+```{r}
+
+Agefit <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title + FamilySize,
+                  data=combine[!is.na(combine$Age),], 
+                  method="anova")
+combine$Age[is.na(combine$Age)] <- predict(Agefit, combine[is.na(combine$Age),])
+```
+
+6-about the col fare
+```{r,echo=FALSE}
+summary(combine$Fare)
+
+```
+so we can take the median of this col and but it instead of NA value
+```{r}
+combine$Fare[which(is.na(combine$Fare))] <- median(combine$Fare, na.rm=TRUE)
+```
+so we can ask ourselvies why we combine the test and train data together and the answer is we need to do tis operation in the all entries here so that the factors for all colums can be leveled in all data because some data in the test might not be in the train so we do all the operation in all here (btw it is my understanding so it may be completly wrong!!!!xd)
+```{r}
+train <- combine[1:891,]
+test <- combine[892:1309,]
+```
+so lets make our prediction with rpart function 
+```{r}
+ fit <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title + FamilySize + FamilyID,
+               data=train, 
+               method="class")
+Prediction <- predict(fit, test, type = "class")
+finalpredict<-data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+```
+so lets see out tree
+```{r}
+ fancyRpartPlot(fit)
+```
+
